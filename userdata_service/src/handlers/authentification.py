@@ -1,19 +1,21 @@
 from datetime import datetime, timedelta
 import logging
+import uuid
 from fastapi import APIRouter, Response
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, UUID4
 from sql.queries import (
     select_auth_data,
     insert_auth_data,
     insert_users_data,
     insert_tokens,
     select_auth_data_by_password,
+    select_token,
 )
-from utils.postgresql import connect, execute_query, Connection
-from utils.encoding import encode_password
 
-import uuid
+from common.models import Error
+from utils.postgresql import connect, execute_query
+from utils.encoding import encode_password
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,9 +23,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-class Error(BaseModel):
-    code: str
-    message: str
+class AuthentificationData(BaseModel):
+    token: str
+    user_id: UUID4
 
 
 class RegisterRequest(BaseModel):
@@ -39,7 +41,12 @@ class AuthorizeRequest(BaseModel):
 
 
 class AuthorizeResponse(BaseModel):
+    auth_data: AuthentificationData
+
+
+class CheckTokenRequest(BaseModel):
     token: str
+    user_id: UUID4
 
 
 @router.post("/register/v1", status_code=201, responses={400: {"model": Error}})
@@ -122,5 +129,23 @@ async def authorize_v1(body: AuthorizeRequest):
                 created_at="NOW()",
                 active_until=datetime.now() + timedelta(hours=12),
             )
+    return AuthorizeResponse(auth_data=AuthentificationData(token=token, user_id=user_id))
 
-    return AuthorizeResponse(token=token)
+
+@router.post(
+    "/check-token/v1",
+    responses={403: {}},
+)
+async def check_token_v1(body: CheckTokenRequest):
+    with connect() as conn:
+        with conn.begin():
+            rows = execute_query(
+                conn,
+                select_token.QUERY,
+                token=body.token,
+                user_id=body.user_id,
+            ).fetchall()
+            if len(rows) == 0:
+                return Response(status_code=403)
+            if len(rows) > 1:
+                raise RuntimeError("Invariant failed, too many lines")
