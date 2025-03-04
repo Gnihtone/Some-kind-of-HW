@@ -1,0 +1,3 @@
+pgdata
+*.pyc
+__pycache__
