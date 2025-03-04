@@ -1,0 +1,207 @@
+specification {
+  element actor
+  element system
+  element component
+  element queue {
+    style {
+      shape: queue
+    }
+  }
+  element database {
+    style {
+      shape: storage
+    }
+  }
+  element table {
+    style {
+      color: green
+    }
+  }
+  element column
+}
+
+model {
+  ui = actor 'UI' {
+    description 'Frontend'
+  }
+
+  saas = system 'Our SaaS' {
+    gateway = component 'Gateway service' {
+      description 'Сервис перенаправляет внешние запросы во внутренние системы'
+    }
+
+    userdata_service = component 'User data service' {
+      description 'Сервис со всей информацией о пользователях'
+
+      userdata_db = database 'PostgresSQL DB with user data' {
+        icon tech:postgresql
+
+        users_data = table {
+          user_id = column 'user_id' 'uuid NOT NULL'
+          name = column 'name' 'str NOT NULL'
+          surname = column 'surname' 'str'
+          status = column 'status' 'str' 
+          gender = column 'gender' 'enum NOT NULL'
+          version = column 'version' 'int NOT NULL'
+        }
+        table authentification_data {
+          column user_id 'user_id' 'uuid NOT NULL'
+          column username 'username' 'str NOT NULL'
+          column email 'email' 'str'
+          column phone_number 'phone_number' 'str'
+          column encoded_password 'encoded_password' 'str NOT NULL'
+          column version 'version' 'int NOT NULL'
+        }
+        table idempotency_data {
+          column idempotency_token 'idempotency_token' 'str NOT NULL'
+          column payload 'payload' 'str'
+          column created_at 'updated_at' 'datetime NOT NULL'
+        }
+
+        users_data.user_id -> authentification_data.user_id
+      }
+    }
+
+    component posts_service 'Posts service' {
+      description 'Сервис с постами, комментариями, лайками и другой информацией'
+      database posts_db 'PostgresSQL DB with posts data' {
+        icon tech:postgresql
+
+        table posts_data {
+          column post_id 'post_id' 'uuid NOT NULL'
+          column creator_user_id 'creator_user_id' 'uuid NOT NULL'
+          column title_ 'title' 'str NOT NULL'
+          column content 'content' 'str NOT NULL'
+
+          column version 'version' 'int NOT NULL'
+          column created_at 'created_at' 'datetime NOT NULL'
+          column updated_at 'updated_at' 'datetime NOT NULL'
+        }
+        table comments_data {
+          column post_id 'post_id' 'uuid NOT NULL'
+          column comment_id 'comment_id' 'uuid NOT NULL'
+          column commentator_user_id 'commentator_user_id' 'uuid NOT NULL'
+          column content 'content' 'str NOT NULL'
+
+          column version 'version' 'int NOT NULL'
+          column created_at 'created_at' 'datetime NOT NULL'
+          column updated_at 'updated_at' 'datetime NOT NULL'
+        }
+        table reactions_data {
+          column post_id 'post_id' 'uuid NOT NULL'
+          column reaction_id 'reaction_id' 'uuid NOT NULL'
+          column user_id 'user_id' 'uuid NOT NULL'
+          column reaction_type 'reaction_type' 'uuid NOT NULL'
+          column created_at 'created_at' 'datetime NOT NULL'
+        }
+        table idempotency_data {
+          column idempotency_token 'Idempotency token' 'str NOT NULL'
+          column payload 'payload' 'str'
+          column created_at 'created_at' 'datetime NOT NULL'
+        }
+
+        comments_data.post_id -> posts_data.post_id
+        reactions_data.post_id -> posts_data.post_id
+      }
+    }
+    
+    component statistics_service 'Statistics service' {
+      description 'Сервис для сбора статистики'
+
+      database statistics_db 'ClickHouse DB with statistics data' {
+        icon https://github.com/ClickHouse/ClickHouse/raw/refs/heads/master/docs/ru/images/logo.svg
+
+        table posts {
+          column post_id 'post_id' 'uuid NOT NULL'
+          column views_count 'views_count' 'int NOT NULL'
+          column post_content_length 'post_content_length' 'int NOT NULL'
+          column created_at 'created_at' 'datetime NOT NULL'
+          column updated_at 'updated_at' 'datetime NOT NULL'
+        }
+        
+        table comments {
+          column post_id 'post_id' 'uuid NOT NULL'
+          column comment_id 'comment_id' 'uuid NOT NULL'
+          column commentator_user_id 'commentator_user_id' 'uuid NOT NULL'
+          column views_count 'views_count' 'int NOT NULL'
+          column comment_content_length 'comment_content_length' 'int NOT NULL'
+          column created_at 'created_at' 'datetime NOT NULL'
+          column updated_at 'updated_at' 'datetime NOT NULL'
+        }
+
+        table reactions {
+          column post_id 'post_id' 'uuid NOT NULL'
+          column reaction_id 'reaction_id' 'uuid NOT NULL'
+          column user_id 'user_id' 'uuid NOT NULL'
+          column reaction_type 'reaction_type' 'uuid NOT NULL'
+          column created_at 'created_at' 'datetime NOT NULL'
+        }
+      }
+    }
+
+    queue statistics_broker {
+      description 'Брокер для отправки сообщений в сервис сбора статистики'
+
+      icon tech:kafka
+    }
+
+    gateway -> userdata_service 'Authorization, registration, etc.'
+    gateway -> posts_service 'Likes, posts, comments, etc.'
+
+    userdata_service -> statistics_broker 'Push data'
+    posts_service -> statistics_broker 'Push data'
+
+    statistics_broker -> statistics_service 'Send data'
+  }
+
+  ui -> gateway 'Use of api'
+}
+
+views {
+  view index {
+    include *
+  }
+
+  view of saas {
+    include *
+
+    style ui {
+      color muted
+    }
+  }
+
+  view of userdata_service.userdata_db {
+    include *
+    include users_data.*
+    include authentification_data.*
+    include idempotency_data.*
+
+    style users_data, authentification_data, idempotency_data {
+      color red
+    }
+  }
+
+  /**
+   * @likec4-generated(v1)
+   * iKRoYXNo2SgwM2RlMmExNzdlYzRhMWNhODYyMzM1YjkyNzEwNzFkMjA5Y2Y4ZWUwqmF1dG9MYXlvdXSBqWRpcmVjdGlvbqJUQqF4CKF5DqV3aWR0aM0UeKZoZWlnaHTNA9Clbm9kZXPeABu7c2Fhcy5wb3N0c19zZXJ2aWNlLnBvc3RzX2RigqFilAgOzRR4zQPQoWPD2SlzYWFzLnBvc3RzX3NlcnZpY2UucG9zdHNfZGIuY29tbWVudHNfZGF0YYKhYpQwRc0Gms0CRaFjw9kqc2Fhcy5wb3N0c19zZXJ2aWNlLnBvc3RzX2RiLnJlYWN0aW9uc19kYXRhgqFilM0NtEvNAz7NA2uhY8PZLHNhYXMucG9zdHNfc2VydmljZS5wb3N0c19kYi5pZGVtcG90ZW5jeV9kYXRhgqFilM0RGkXNAz7NAkWhY8PZJnNhYXMucG9zdHNfc2VydmljZS5wb3N0c19kYi5wb3N0c19kYXRhgqFi
+   * lM0G8kXNBprNAkWhY8PZMXNhYXMucG9zdHNfc2VydmljZS5wb3N0c19kYi5jb21tZW50c19kYXRhLnBvc3RfaWSCoWKUzQVizILNAUDMtKFjwtk0c2Fhcy5wb3N0c19zZXJ2aWNlLnBvc3RzX2RiLmNvbW1lbnRzX2RhdGEuY29tbWVudF9pZIKhYpRYzILNAUDMtKFjwtk9c2Fhcy5wb3N0c19zZXJ2aWNlLnBvc3RzX2RiLmNvbW1lbnRzX2RhdGEuY29tbWVudGF0b3JfdXNlcl9pZIKhYpTNAgbMgs0BQMy0oWPC2TFzYWFzLnBvc3RzX3NlcnZpY2UucG9zdHNfZGIuY29tbWVudHNfZGF0YS5jb250ZW50gqFilM0DtMyCzQFAzLShY8LZMXNhYXMucG9zdHNfc2VydmljZS5wb3N0c19kYi5jb21tZW50c19kYXRhLnZlcnNpb26CoWKUWM0Brs0BQMy0oWPC2TRzYWFzLnBv
+   * c3RzX3NlcnZpY2UucG9zdHNfZGIuY29tbWVudHNfZGF0YS5jcmVhdGVkX2F0gqFilM0DtM0Brs0BQMy0oWPC2TRzYWFzLnBvc3RzX3NlcnZpY2UucG9zdHNfZGIuY29tbWVudHNfZGF0YS51cGRhdGVkX2F0gqFilM0FYs0Brs0BQMy0oWPC2TJzYWFzLnBvc3RzX3NlcnZpY2UucG9zdHNfZGIucmVhY3Rpb25zX2RhdGEucG9zdF9pZIKhYpTNDdzMgs0BQMy0oWPC2TZzYWFzLnBvc3RzX3NlcnZpY2UucG9zdHNfZGIucmVhY3Rpb25zX2RhdGEucmVhY3Rpb25faWSCoWKUzQ3czQGuzQFAzLShY8LZMnNhYXMucG9zdHNfc2VydmljZS5wb3N0c19kYi5yZWFjdGlvbnNfZGF0YS51c2VyX2lkgqFilM0Pis0Brs0BQMy0oWPC2ThzYWFzLnBvc3RzX3NlcnZpY2UucG9zdHNf
+   * ZGIucmVhY3Rpb25zX2RhdGEucmVhY3Rpb25fdHlwZYKhYpTNDe7NAtHNAUDMtKFjwtk1c2Fhcy5wb3N0c19zZXJ2aWNlLnBvc3RzX2RiLnJlYWN0aW9uc19kYXRhLmNyZWF0ZWRfYXSCoWKUzQ+KzQLazQFAzLShY8LZPnNhYXMucG9zdHNfc2VydmljZS5wb3N0c19kYi5pZGVtcG90ZW5jeV9kYXRhLmlkZW1wb3RlbmN5X3Rva2VugqFilM0S8MyCzQFAzLShY8LZNHNhYXMucG9zdHNfc2VydmljZS5wb3N0c19kYi5pZGVtcG90ZW5jeV9kYXRhLnBheWxvYWSCoWKUzRFCzILNAUDMtKFjwtk3c2Fhcy5wb3N0c19zZXJ2aWNlLnBvc3RzX2RiLmlkZW1wb3RlbmN5X2RhdGEuY3JlYXRlZF9hdIKhYpTNEvDNAa7NAUDMtKFjwtk2c2Fhcy5wb3N0c19zZXJ2aWNlLnBvc3Rz
+   * X2RiLnBvc3RzX2RhdGEuY3JlYXRvcl91c2VyX2lkgqFilM0HGsyCzQFAzLShY8LZLXNhYXMucG9zdHNfc2VydmljZS5wb3N0c19kYi5wb3N0c19kYXRhLnRpdGxlX4KhYpTNCMjMgs0BQMy0oWPC2S5zYWFzLnBvc3RzX3NlcnZpY2UucG9zdHNfZGIucG9zdHNfZGF0YS5jb250ZW50gqFilM0KdsyCzQFAzLShY8LZLnNhYXMucG9zdHNfc2VydmljZS5wb3N0c19kYi5wb3N0c19kYXRhLnZlcnNpb26CoWKUzQcazQGuzQFAzLShY8LZMXNhYXMucG9zdHNfc2VydmljZS5wb3N0c19kYi5wb3N0c19kYXRhLmNyZWF0ZWRfYXSCoWKUzQjIzQGuzQFAzLShY8LZMXNhYXMucG9zdHNfc2VydmljZS5wb3N0c19kYi5wb3N0c19kYXRhLnVwZGF0ZWRfYXSCoWKUzQwkzQGuzQFA
+   * zLShY8LZLnNhYXMucG9zdHNfc2VydmljZS5wb3N0c19kYi5wb3N0c19kYXRhLnBvc3RfaWSCoWKUzQp2zQGuzQFAzLShY8KlZWRnZXOCpzFvcnBna2iBoXCaks0Gos0BJZLNBrTNASySzQbGzQEyks0G180BNpLNCFDNAZ2SzQjFzQFIks0KP80BrpLNCk7NAbKSzQpdzQG3ks0KbM0BvacxM2RhNmdygaFwmpLNDdzNASOSzQ3KzQEqks0NuM0BMJLNDafNATaSzQzmzQF4ks0Mrs0BbZLNC+3NAa6SzQvezQGzks0Lz80BuZLNC8DNAb8=
+   */
+  view of posts_service.posts_db {
+    include *
+    include posts_data.*
+    include comments_data.*
+    include idempotency_data.*
+    include reactions_data.*
+  }
+
+  view of statistics_service.statistics_db {
+    include *
+    include posts.*
+    include comments.*
+    include reactions.*
+  }
+}
