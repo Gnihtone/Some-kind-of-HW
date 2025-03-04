@@ -1,4 +1,0 @@
-
-QUERY='''
-CREATE DATABASE userdata;
-'''
