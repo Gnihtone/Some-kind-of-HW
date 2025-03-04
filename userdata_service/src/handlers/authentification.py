@@ -149,3 +149,4 @@ async def check_token_v1(body: CheckTokenRequest):
                 return Response(status_code=403)
             if len(rows) > 1:
                 raise RuntimeError("Invariant failed, too many lines")
+ 
