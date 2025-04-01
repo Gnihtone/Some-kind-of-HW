@@ -1,11 +1,12 @@
 services:
   gateway-service:
     build: gateway_service/
-    command: python3.13 -m fastapi dev main.py --host 0.0.0.0 --port 8001
+    command: python3.13 -m fastapi dev src/main.py --host 0.0.0.0 --port 8001
     ports:
       - 8001:8001
     depends_on:
       - userdata-service
+      - posts-grpc-service
 
   userdata-service:
     build: userdata_service/
@@ -14,6 +15,22 @@ services:
       - 8002:8002
     depends_on:
       - postgres-userdata
+    
+  posts-fastapi-service:
+    build: posts_service/
+    command: python3.13 -m fastapi dev src/main_fastapi.py --host 0.0.0.0 --port 8003
+    ports:
+      - 8003:8003
+    depends_on:
+      - postgres-posts
+
+  posts-grpc-service:
+    build: posts_service/
+    command: python3.13 src/main_grpc.py
+    ports:
+      - 50051:50051
+    depends_on:
+      - postgres-posts
 
   postgres-userdata:
     image: postgres:latest
@@ -26,7 +43,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./pgdata:/var/lib/postgresql/data/pgdata
+      - ./pgdata_userdata:/var/lib/postgresql/data/pgdata
     deploy:
       resources:
         limits:
@@ -45,6 +62,43 @@ services:
                -c default_statistics_target=100
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres_user -d userdata" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+    
+  postgres-posts:
+    image: postgres:latest
+    container_name: postgres_posts
+    environment:
+      POSTGRES_USER: postgres_user
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_DB: posts
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./pgdata_posts:/var/lib/postgresql/data/pgdata
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    command: >
+      postgres -c max_connections=1000
+               -c shared_buffers=256MB
+               -c effective_cache_size=768MB
+               -c maintenance_work_mem=64MB
+               -c checkpoint_completion_target=0.7
+               -c wal_buffers=16MB
+               -c default_statistics_target=100
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres_user -d posts" ]
       interval: 30s
       timeout: 10s
       retries: 5
