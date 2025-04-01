@@ -1,0 +1,4 @@
+
+QUERY='''
+CREATE DATABASE userdata;
+'''
